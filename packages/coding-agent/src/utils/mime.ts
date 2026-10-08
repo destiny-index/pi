@@ -33,6 +33,35 @@ export async function detectSupportedImageMimeTypeFromFile(filePath: string): Pr
 	}
 }
 
+// --- Video MIME detection ---
+
+export function detectVideoMimeType(buffer: Uint8Array): string | null {
+	// MP4/MOV: 4-byte size + "ftyp" brand identifier
+	if (buffer.length >= 12 && startsWithAscii(buffer, 4, "ftyp")) {
+		return "video/mp4";
+	}
+	// WebM/MKV: EBML magic bytes
+	if (buffer.length >= 4 && buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+		return "video/webm";
+	}
+	// Ogg (can contain Theora video)
+	if (startsWithAscii(buffer, 0, "OggS")) {
+		return "video/ogg";
+	}
+	return null;
+}
+
+export async function detectVideoMimeTypeFromFile(filePath: string): Promise<string | null> {
+	const fileHandle = await open(filePath, "r");
+	try {
+		const buffer = Buffer.alloc(16);
+		const { bytesRead } = await fileHandle.read(buffer, 0, 16, 0);
+		return detectVideoMimeType(buffer.subarray(0, bytesRead));
+	} finally {
+		await fileHandle.close();
+	}
+}
+
 function isPng(buffer: Uint8Array): boolean {
 	return (
 		buffer.length >= 16 && readUint32BE(buffer, PNG_SIGNATURE.length) === 13 && startsWithAscii(buffer, 12, "IHDR")

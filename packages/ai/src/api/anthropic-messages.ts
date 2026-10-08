@@ -36,6 +36,7 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
+	VideoContent,
 } from "../types.ts";
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
@@ -145,7 +146,7 @@ function convertImageBlock(image: ImageContent) {
 /**
  * Convert content blocks to Anthropic API format
  */
-function convertContentBlocks(content: (TextContent | ImageContent)[]):
+function convertContentBlocks(content: (TextContent | ImageContent | VideoContent)[]):
 	| string
 	| Array<
 			| { type: "text"; text: string }
@@ -172,7 +173,8 @@ function convertContentBlocks(content: (TextContent | ImageContent)[]):
 				text: sanitizeSurrogates(block.text),
 			};
 		}
-		return convertImageBlock(block);
+		// Assumption: only llama.cpp models declare video input, so no video block reaches this API.
+		return convertImageBlock(block as ImageContent);
 	});
 
 	// If only images (no text), add placeholder text block
@@ -1413,7 +1415,8 @@ function convertMessages(
 							text: sanitizeSurrogates(item.text),
 						};
 					} else {
-						return convertImageBlock(item);
+						// Assumption: only llama.cpp models declare video input, so no video block reaches this API.
+						return convertImageBlock(item as ImageContent);
 					}
 				});
 				const filteredBlocks = blocks.filter((b) => {

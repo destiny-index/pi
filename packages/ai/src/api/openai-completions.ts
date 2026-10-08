@@ -1283,6 +1283,11 @@ export function convertMessages(
 								type: "text",
 								text: sanitizeSurrogates(item.text),
 							} satisfies ChatCompletionContentPartText;
+						} else if (item.type === "video") {
+							return {
+								type: "input_video",
+								input_video: { data: item.data },
+							} as unknown as ChatCompletionContentPart;
 						} else {
 							return {
 								type: "image_url",
@@ -1415,6 +1420,7 @@ export function convertMessages(
 			params.push(assistantMsg);
 		} else if (msg.role === "toolResult") {
 			const imageBlocks: Array<{ type: "image_url"; image_url: { url: string } }> = [];
+			const videoBlocks: ChatCompletionContentPart[] = [];
 			let j = i;
 
 			for (; j < transformedMessages.length && transformedMessages[j].role === "toolResult"; j++) {
@@ -1426,10 +1432,17 @@ export function convertMessages(
 					.map((block) => block.text)
 					.join("\n");
 				const hasImages = toolMsg.content.some((c) => c.type === "image");
+				const hasVideos = toolMsg.content.some((c) => c.type === "video");
 
 				// Always send tool result with text (or placeholder if only images)
 				const hasText = textResult.trim().length > 0;
-				const toolResultText = hasText ? textResult : hasImages ? "(see attached image)" : "(no tool output)";
+				const toolResultText = hasText
+					? textResult
+					: hasVideos
+						? "(see attached video)"
+						: hasImages
+							? "(see attached image)"
+							: "(no tool output)";
 				// Some providers require the 'name' field in tool results
 				const toolResultMsg: ChatCompletionToolMessageParam = {
 					role: "tool",
@@ -1453,11 +1466,21 @@ export function convertMessages(
 						}
 					}
 				}
+				if (hasVideos && model.input.includes("video")) {
+					for (const block of toolMsg.content) {
+						if (block.type === "video") {
+							videoBlocks.push({
+								type: "input_video",
+								input_video: { data: block.data },
+							} as unknown as ChatCompletionContentPart);
+						}
+					}
+				}
 			}
 
 			i = j - 1;
 
-			if (imageBlocks.length > 0) {
+			if (imageBlocks.length > 0 || videoBlocks.length > 0) {
 				if (compat.requiresAssistantAfterToolResult) {
 					params.push({
 						role: "assistant",
@@ -1465,15 +1488,19 @@ export function convertMessages(
 					});
 				}
 
+				const mediaContent: ChatCompletionContentPart[] = [];
+				if (imageBlocks.length > 0) {
+					mediaContent.push({ type: "text", text: "Attached image(s) from tool result:" });
+					mediaContent.push(...imageBlocks);
+				}
+				if (videoBlocks.length > 0) {
+					mediaContent.push({ type: "text", text: "Attached video(s) from tool result:" });
+					mediaContent.push(...videoBlocks);
+				}
+
 				params.push({
 					role: "user",
-					content: [
-						{
-							type: "text",
-							text: "Attached image(s) from tool result:",
-						},
-						...imageBlocks,
-					],
+					content: mediaContent,
 				});
 				lastRole = "user";
 			} else {

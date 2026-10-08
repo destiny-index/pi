@@ -45,6 +45,7 @@ import {
 	type ToolCall,
 	type ToolResultMessage,
 	type TranscriptContext,
+	type VideoContent,
 } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -190,7 +191,7 @@ function sanitizeSurrogates(text: string): string {
 }
 
 function convertContentBlocks(
-	content: (TextContent | ImageContent)[],
+	content: (TextContent | ImageContent | VideoContent)[],
 ): string | Array<{ type: "text"; text: string } | { type: "image"; source: any }> {
 	const hasImages = content.some((c) => c.type === "image");
 	if (!hasImages) {

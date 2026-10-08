@@ -48,6 +48,7 @@ import type {
 	Tool,
 	ToolCall,
 	ToolResultMessage,
+	VideoContent,
 } from "../types.ts";
 import { appendAssistantMessageDiagnostic } from "../utils/diagnostics.ts";
 import { normalizeProviderError } from "../utils/error-body.ts";
@@ -971,15 +972,16 @@ function sanitizeBedrockDocument(value: JsonValue): DocumentType {
 	return value;
 }
 
-function convertToolResultContent(content: (TextContent | ImageContent)[]): ToolResultContentBlock[] {
+function convertToolResultContent(content: (TextContent | ImageContent | VideoContent)[]): ToolResultContentBlock[] {
 	const result: ToolResultContentBlock[] = [];
 	for (const c of content) {
 		if (c.type === "image") {
 			result.push({ image: createImageBlock(c.mimeType, c.data) });
-		} else {
+		} else if (c.type === "text") {
 			const textBlock = createNonBlankTextBlock(c.text);
 			if (textBlock) result.push(textBlock);
 		}
+		// Video blocks are skipped (not supported in Bedrock format yet)
 	}
 	if (result.length === 0) result.push({ text: EMPTY_TEXT_PLACEHOLDER });
 	return result;

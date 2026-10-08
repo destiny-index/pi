@@ -441,6 +441,12 @@ export interface ImageContent {
 	mimeType: string; // e.g., "image/jpeg", "image/png"
 }
 
+export interface VideoContent {
+	type: "video";
+	data: string; // base64 encoded video data
+	mimeType: string; // e.g., "video/mp4", "video/webm"
+}
+
 export interface ToolCall {
 	type: "toolCall";
 	id: string;
@@ -571,7 +577,7 @@ export interface SystemMessage {
 
 export interface UserMessage {
 	role: "user";
-	content: string | (TextContent | ImageContent)[];
+	content: string | (TextContent | ImageContent | VideoContent)[];
 	timestamp: number; // Unix timestamp in milliseconds
 }
 
@@ -635,7 +641,7 @@ export type ToolResultMessage<TDetails = JsonValue> = IsJsonCompatible<TDetails>
 			role: "toolResult";
 			toolCallId: string;
 			toolName: string;
-			content: (TextContent | ImageContent)[]; // Supports text and images
+			content: (TextContent | ImageContent | VideoContent)[]; // Supports text, images, and videos
 			details?: JsonRepresentation<TDetails>;
 			/** Usage from the tool execution itself, if available. Not part of main LLM context accounting. */
 			usage?: Usage;

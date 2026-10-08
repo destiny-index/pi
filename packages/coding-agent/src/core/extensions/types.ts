@@ -42,6 +42,7 @@ import type {
 	ToolResultMessage,
 	TranscriptContext,
 	Usage,
+	VideoContent,
 } from "@earendil-works/pi-ai";
 import type {
 	AutocompleteItem,
@@ -1271,7 +1272,7 @@ interface ToolResultEventBase {
 	/** Set when another tool (for example a codemode script) issued this call. */
 	parentToolCallId?: string;
 	input: Record<string, unknown>;
-	content: (TextContent | ImageContent)[];
+	content: (TextContent | ImageContent | VideoContent)[];
 	/**
 	 * Machine-readable result for tools that declare an `outputSchema`. Handlers that redact
 	 * `content` should also replace this; replacing `content` alone drops it.
@@ -1481,7 +1482,7 @@ export type UserBashEventResult =
  * longer match. Return it along with `content` to keep it.
  */
 export interface ToolResultEventResult {
-	content?: (TextContent | ImageContent)[];
+	content?: (TextContent | ImageContent | VideoContent)[];
 	details?: unknown;
 	structuredContent?: JsonValue;
 	isError?: boolean;
@@ -1996,7 +1997,7 @@ interface ProviderModelConfigBase {
 	/** API endpoint URL override for this model. */
 	baseUrl?: string;
 	/** Supported input types. */
-	input: ("text" | "image")[];
+	input: ("text" | "image" | "video")[];
 	/** Provider input limits and cache-safe image preprocessing metadata. */
 	inputLimits?: AnyModel["inputLimits"];
 	/** Per-million-token cost rates and optional request-wide input pricing tiers. */
