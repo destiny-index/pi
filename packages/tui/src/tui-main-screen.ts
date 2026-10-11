@@ -320,13 +320,14 @@ export class TuiMainScreen extends TuiBase implements TUI {
 		};
 
 		const redrawLogDirectory = process.env.PI_TUI_DEBUG_REDRAW === "1" ? this.logDirectory : undefined;
-		const logRedraw = (reason: string): void => {
+		const logRenderEvent = (tag: string, reason: string): void => {
 			if (redrawLogDirectory === undefined) return;
 			const logPath = path.join(redrawLogDirectory, "pi-tui-debug.log");
-			const msg = `[${new Date().toISOString()}] fullRender: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
+			const msg = `[${new Date().toISOString()}] ${tag}: ${reason} (prev=${this.previousLines.length}, new=${newLines.length}, height=${height})\n`;
 			fs.mkdirSync(path.dirname(logPath), { recursive: true });
 			fs.appendFileSync(logPath, msg);
 		};
+		const logRedraw = (reason: string): void => logRenderEvent("fullRender", reason);
 
 		// First render - just output everything without clearing (assumes clean screen)
 		if (this.previousLines.length === 0 && !widthChanged && !heightChanged) {
@@ -447,12 +448,34 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			return;
 		}
 
-		// Differential rendering can only touch what was actually visible.
-		// If the first changed line is above the previous viewport, we need a full redraw.
+		// Differential rendering can only touch what is visible on screen. Changed rows above
+		// the previous viewport are in scrollback; repainting them is neither possible nor necessary.
 		if (firstChanged < prevViewportTop) {
-			logRedraw(`firstChanged < viewportTop (${firstChanged} < ${prevViewportTop})`);
-			fullRender(true);
-			return;
+			if (lastChanged < prevViewportTop) {
+				// Every changed row is above the viewport. Nothing visible differs; update
+				// bookkeeping and skip painting entirely.
+				logRenderEvent("skip", `all changes above viewport (${lastChanged} < ${prevViewportTop})`);
+				this.previousLines = newLines;
+				this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+				this.previousWidth = width;
+				this.previousHeight = height;
+				this.previousViewportTop = prevViewportTop;
+				this.cursorRow = Math.max(0, newLines.length - 1);
+				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+				this.positionHardwareCursor(cursorPos, newLines.length);
+				return;
+			}
+			if (newLines.length < this.previousLines.length) {
+				// Content shrank while changes start above the viewport: the viewport itself must
+				// slide up, which relative-only painting cannot express.
+				logRedraw(`firstChanged < viewportTop with shrink (${firstChanged} < ${prevViewportTop})`);
+				fullRender(true);
+				return;
+			}
+			// Stable or growing content with changes spanning into the viewport: repaint the
+			// visible range only.
+			logRenderEvent("clamp", `firstChanged to viewportTop (${firstChanged} -> ${prevViewportTop})`);
+			firstChanged = prevViewportTop;
 		}
 
 		// Render from first changed line to end

@@ -954,6 +954,100 @@ describe("TUI differential rendering", () => {
 	});
 });
 
+describe("TUI above-viewport changes", () => {
+	it("skips painting when every changed row is in scrollback", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui: TUI = new TuiMainScreen(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		const base = Array.from({ length: 30 }, (_, i) => `Line ${i}`);
+		component.lines = base;
+		tui.start();
+		await terminal.waitForRender();
+		const redrawsAfterFirst = tui.fullRedraws;
+
+		// Viewport top is at line 20; line 5 sits in scrollback.
+		component.lines = base.map((line, i) => (i === 5 ? "Line 5 edited" : line));
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		assert.strictEqual(tui.fullRedraws, redrawsAfterFirst, "scrollback-only change must not full redraw");
+		assert.deepStrictEqual(terminal.getViewport(), base.slice(-10));
+
+		// A later change inside the viewport must still be painted differentially.
+		const lines = component.lines.map((line, i) => (i === 25 ? "Line 25 edited" : line));
+		component.lines = lines;
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		assert.strictEqual(tui.fullRedraws, redrawsAfterFirst, "viewport change must not full redraw");
+		assert.deepStrictEqual(terminal.getViewport(), lines.slice(-10));
+
+		tui.stop();
+	});
+
+	it("clamps to the viewport when streaming changes span from scrollback into it", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui: TUI = new TuiMainScreen(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		const base = Array.from({ length: 20 }, (_, i) => `Line ${i}`);
+		component.lines = [...base, "thinking 0"];
+		tui.start();
+		await terminal.waitForRender();
+		const redrawsAfterFirst = tui.fullRedraws;
+
+		// Simulate a live streaming tail: each frame edits a scrollback row (line 5, above
+		// the viewport top) and grows the tail, so the changed range spans the viewport top.
+		for (let frame = 1; frame <= 20; frame++) {
+			const next = component.lines.map((line, i) => (i === 5 ? `Line 5 at ${frame}` : line));
+			next[next.length - 1] = `thinking ${frame}`;
+			next.push(`tail ${frame}`);
+			component.lines = next;
+			tui.requestRender();
+			await terminal.waitForRender();
+
+			assert.strictEqual(
+				tui.fullRedraws,
+				redrawsAfterFirst,
+				`frame ${frame}: streaming must stay on the differential path`,
+			);
+			assert.deepStrictEqual(
+				terminal.getViewport(),
+				component.lines.slice(-10),
+				`frame ${frame}: screen must match the model`,
+			);
+		}
+
+		tui.stop();
+	});
+
+	it("still full redraws when content shrinks and changes start above the viewport", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui: TUI = new TuiMainScreen(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+
+		component.lines = Array.from({ length: 20 }, (_, i) => `Line ${i}`);
+		tui.start();
+		await terminal.waitForRender();
+		const redrawsAfterFirst = tui.fullRedraws;
+
+		// Change a scrollback row and delete 8 middle rows: the viewport itself must slide up.
+		const base = component.lines;
+		component.lines = [base[0].replace("Line 0", "Line 0 edited"), ...base.slice(1, 12)];
+		tui.requestRender();
+		await terminal.waitForRender();
+
+		assert.strictEqual(tui.fullRedraws, redrawsAfterFirst + 1, "shrinking viewport must full redraw");
+		assert.deepStrictEqual(terminal.getViewport(), component.lines.slice(-10));
+
+		tui.stop();
+	});
+});
+
 describe("TUI fake cursor", () => {
 	it("draws the focused fake cursor in reverse video and omits it when the hardware cursor is shown", async () => {
 		const terminal = new LoggingVirtualTerminal(20, 5);
